@@ -173,6 +173,9 @@ $ git remote add origin https://github.com/guyibang/TEST2.git
 ​    ![img](https://img-blog.csdn.net/20170414210648791)
 
 ​    ![img](https://img-blog.csdn.net/20170414210812167)
+    
+      使用pull命令 ， 允许使用--allow-unrelated-histories参数将本地分支和仓库分支合并
+    git pull origin master --allow-unrelated-histories
 
 #### 第九步：推送项目文件到Github远程仓库
 
