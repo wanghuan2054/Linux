@@ -916,5 +916,5 @@ ansible all -m  setup  -a "filter=ansible_processor*"
     },
     "changed": false
 }
-[root@ansible ~]#
 ```
+
