@@ -9,6 +9,7 @@
 
 `cat /etc/redhat-release `
 CentOS Linux release 7.8.2003 (Core)
+
 ## Zabbix二进制安装
 ### centos 7 添加阿里云镜像
 ```bash
@@ -173,7 +174,6 @@ more /var/log/zabbix/zabbix_server.log
 zabbix_server -V
 zabbix_server --version
 ```
-### 查看Zabbix Server版本
 ### 配置Zabbix frontend
 ```bash
 vim /etc/php.ini

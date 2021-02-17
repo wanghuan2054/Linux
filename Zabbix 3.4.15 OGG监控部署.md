@@ -78,11 +78,14 @@ $ ps -ef | grep zabbix
   oracle 11755  3348  0 14:38:35 pts/3     0:00 grep zabbix
 # HP-UX Agent 进程目前使用手动关闭
 $ kill -9  21195 21196  21194 21199 21198 21197
+$ kill -9 `ps -ef | grep zabbix_agentd | grep -v grep | awk '{print $2}'`
 # 重启Agent
 $ cd /opt/zabbix/zabbix_agents/sbin
 
 # 手动启动zabbix_agentd 脚本
 #[/opt/zabbix/zabbix_agents/sbin]./zabbix_agentd
+-- 或者直接启动
+$ /opt/zabbix/zabbix_agents/sbin/zabbix_agentd
 
 # 查看日志，zabbix是否启动成功
 $ cd /tmp/
