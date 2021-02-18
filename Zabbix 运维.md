@@ -2,6 +2,22 @@
 
 **时间**：2021.02.10 10:08:00
 
+## 账号密码
+
+```bash
+# 虚拟机账号密码（XX.XX.XX.220）
+root/root
+
+# MYSQL 管理员账号密码及监控用户密码
+root/Gg117664..
+zabbix/Gg117664..
+
+# zabbix 管理员
+admin/zabbix
+```
+
+
+
 ## 安装环境
 
 ### zabbix server安装信息
@@ -150,6 +166,15 @@ systemctl  stop  httpd.service
 systemctl  status  httpd.service
 ```
 
+## orabbix启动
+
+```bash
+# orabbix 启动
+/opt/init.d/orabbix start
+```
+
+
+
 ### 检查监控是否正常
 
 1.    zabbix agent 日志是否有报错
@@ -189,6 +214,18 @@ Windows 系统防火墙关闭或者开放10050端口 ， 自行百度
 ### 设置zabbix_agentd服务自启动
 ```bash
 win+R,运行services.msc,默认是自动
+```
+
+## 日志及配置管理
+
+```verilog
+Zabbix server配置文件:/etc/zabbix/zabbix_server.conf
+日志文件: /var/log/zabbix/zabbix_server.log
+mysql数据库配置文件: /etc/my.cnf
+日志文件：/var/log/mysqld.log
+apache php参数: /etc/httpd/conf.d/zabbix.conf
+orabbix配置：/opt/orabbix/conf/config.props
+日志文件：/opt/orabbix/logs/orabbix.log
 ```
 
 
