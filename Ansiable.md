@@ -263,6 +263,8 @@ ansible-doc -s  ping
 
 ### ansible
 
+#### 利用sshpass批量实现基于key验证 
+
 此工具通过ssh协议，实现对远程主机的配置管理、应用部署、任务执行等功能
 
 建议：使用此工具前，先配置ansible主控端能基于密钥认证的方式联系各个被管理节点
@@ -271,9 +273,12 @@ ansible-doc -s  ping
 
 ```bash
 #!/bin/bash
+# 在主控端使用root生成密钥对
 ssh-keygen -f /root/.ssh/id_rsa  -P ''
 NET=192.168.2
+# 设置密码，最好所有主机密码一样或者有规律
 export SSHPASS=hadoop
+# 批量发送公钥到各个被控节点
 for IP in {54..55};do
     sshpass -e ssh-copy-id -i /root/.ssh/id_rsa.pub  hadoop@$NET.$IP
 done
@@ -305,7 +310,7 @@ ansible <host-pattern> [-m module_name] [-a args]
 -K, --ask-become-pass  #提示输入sudo时的口令
 ```
 
-**ansible查看当前控制的主机列表**
+#### **ansible查看当前控制的主机列表**
 
 ```bash
 [root@devops .ssh]# ansible all  --list
@@ -335,9 +340,8 @@ ansible <host-pattern> [-m module_name] [-a args]
 
 ```
 
+#### **ansible的Host-pattern**
 
-
-**ansible的Host-pattern**
  用于匹配被控制的主机的列表
  All ：表示所有Inventory中的所有主机
 
@@ -403,7 +407,7 @@ ansible “~(web|db).*\.magedu\.com” –m ping
 
 Bash
 
-**ansible命令执行过程** 
+#### **ansible命令执行过程** 
 
 1.加载自己的配置文件 默认/etc/ansible/ansible.cfg
 
@@ -417,7 +421,7 @@ Bash
 
 6.删除临时py文件，退出
 
-**ansible 的执行状态：**
+#### **ansible 的执行状态：**
 
 ```bash
 [root@centos8 ~]#grep -A 14 '\[colors\]' /etc/ansible/ansible.cfg 
@@ -918,3 +922,536 @@ ansible all -m  setup  -a "filter=ansible_processor*"
 }
 ```
 
+## Playbook
+
+### playbook介绍
+
+![Ansible-Playbook详解插图](http://www.yunweipai.com/wp-content/uploads/2020/06/image-20191102181113906-780x281.png)
+
+playbook 剧本是由一个或多个“play”组成的列表
+ play的主要功能在于将预定义的一组主机，装扮成事先通过ansible中的task定义好的角色。Task实际是调用ansible的一个module，将多个play组织在一个playbook中，即可以让它们联合起来，按事先编排的机制执行预定义的动作
+ Playbook 文件是采用YAML语言编写的
+
+### YAML 语言
+
+#### YAMl 语言介绍
+
+YAML是一个可读性高的用来表达资料序列的格式。YAML参考了其他多种语言，包括：XML、C语言、Python、Perl以及电子邮件格式RFC2822等。Clark Evans在2001年在首次发表了这种语言，另外Ingy döt Net与Oren  Ben-Kiki也是这语言的共同设计者,目前很多软件中采有此格式的文件，如:ubuntu，anisble，docker，k8s等
+ YAML：YAML Ain’t Markup Language，即YAML不是XML。不过，在开发的这种语言时，YAML的意思其实是："Yet Another Markup Language"（仍是一种标记语言）
+
+YAML 官方网站：[http://www.yaml.org](http://www.yunweipai.com/go?_=f2fb54694baHR0cDovL3d3dy55YW1sLm9yZw==)
+
+#### YAML 语言特性
+
+- YAML的可读性好
+- YAML和脚本语言的交互性好
+- YAML使用实现语言的数据类型
+- YAML有一个一致的信息模型
+- YAML易于实现
+- YAML可以基于流来处理
+- YAML表达能力强，扩展性好
+
+#### YAML语法简介
+
+- 在单一文件第一行，用连续三个连字号“-” 开始，还有选择性的连续三个点号( … )用来表示文件的结尾
+- 次行开始正常写Playbook的内容，一般建议写明该Playbook的功能
+- 使用#号注释代码
+- 缩进必须是统一的，不能空格和tab混用
+- 缩进的级别也必须是一致的，同样的缩进代表同样的级别，程序判别配置的级别是通过缩进结合换行来实现的
+   YAML文件内容是区别大小写的，key/value的值均需大小写敏感
+- 多个key/value可同行写也可换行写，同行使用，分隔
+- v可是个字符串，也可是另一个列表
+- 一个完整的代码块功能需最少元素需包括 name 和 task
+- 一个name只能包括一个task
+- YAML文件扩展名通常为yml或yaml
+
+YAML的语法和其他高阶语言类似，并且可以简单表达清单、散列表、标量等数据结构。其结构（Structure）通过空格来展示，序列（Sequence）里的项用"-"来代表，Map里的键值对用":"分隔，下面介绍常见的数据结构。
+
+##### List列表
+
+列表由多个元素组成，每个元素放在不同行，且元素前均使用“-”打头，或者将所有元素用 [  ] 括起来放在同一行
+ 范例：
+
+```
+# A list of tasty fruits
+- Apple
+- Orange
+- Strawberry
+- Mango
+
+[Apple,Orange,Strawberry,Mango]
+```
+
+##### Dictionary字典
+
+字典由多个key与value构成，key和value之间用 ：分隔，所有k/v可以放在一行，或者每个 k/v 分别放在不同行
+
+范例：
+
+```yaml
+# An employee record
+name: Example Developer
+job: Developer
+skill: Elite
+也可以将key:value放置于{}中进行表示，用,分隔多个key:value
+
+# An employee record
+{name: “Example Developer”, job: “Developer”, skill: “Elite”}
+```
+
+YAML
+
+范例：
+
+```yaml
+name: John Smith
+age: 41
+gender: Male
+spouse:
+  name: Jane Smith
+  age: 37
+  gender: Female
+children:
+  - name: Jimmy Smith
+    age: 17
+    gender: Male
+  - name: Jenny Smith
+    age 13
+    gender: Female
+```
+
+YAML
+
+##### 三种常见的数据格式
+
+- XML：Extensible Markup Language，可扩展标记语言，可用于数据交换和配置
+- JSON：JavaScript Object Notation, JavaScript 对象表记法，主要用来数据交换或配置，不支持注释
+- YAML：YAML Ain’t Markup Language  YAML 不是一种标记语言， 主要用来配置，大小写敏感，不支持tab
+
+![Ansible-list-Dictionary-数据格式插图](http://www.yunweipai.com/wp-content/uploads/2020/06/image-20191102190516045-780x255.png)
+
+**可以用工具互相转换，参考网站：**
+
+[https://www.json2yaml.com/](http://www.yunweipai.com/go?_=60bb30fe06aHR0cHM6Ly93d3cuanNvbjJ5YW1sLmNvbS8=)
+
+[http://www.bejson.com/json/json2yaml/](http://www.yunweipai.com/go?_=07b1ecff68aHR0cDovL3d3dy5iZWpzb24uY29tL2pzb24vanNvbjJ5YW1sLw==)
+
+### Playbook核心元素
+
+- Hosts   执行的远程主机列表
+- Tasks   任务集
+- Variables 内置变量或自定义变量在playbook中调用
+- Templates  模板，可替换模板文件中的变量并实现一些简单逻辑的文件
+- Handlers  和 notify 结合使用，由特定条件触发的操作，满足条件方才执行，否则不执行
+- tags 标签   指定某条任务执行，用于选择运行playbook中的部分代码。ansible具有幂等性，因此会自动跳过没有变化的部分，即便如此，有些代码为测试其确实没有发生变化的时间依然会非常地长。此时，如果确信其没有变化，就可以通过tags跳过此些代码片断
+
+#### hosts 组件
+
+Hosts：playbook中的每一个play的目的都是为了让特定主机以某个指定的用户身份执行任务。hosts用于指定要执行指定任务的主机，须事先定义在主机清单中
+
+```bash
+one.example.com
+one.example.com:two.example.com
+192.168.1.50
+192.168.1.*
+Websrvs:dbsrvs      #或者，两个组的并集
+Websrvs:&dbsrvs     #与，两个组的交集
+webservers:!phoenix  #在websrvs组，但不在dbsrvs组
+```
+
+案例：
+
+```yaml
+- hosts: websrvs:appsrvs
+```
+
+#### remote_user 组件
+
+remote_user: 可用于Host和task中。也可以通过指定其通过sudo的方式在远程主机上执行任务，其可用于play全局或某任务；此外，甚至可以在sudo时使用sudo_user指定sudo时切换的用户
+
+```yaml
+- hosts: websrvs
+  remote_user: root
+
+  tasks:
+    - name: test connection
+      ping:
+      remote_user: magedu
+      sudo: yes                 #默认sudo为root
+      sudo_user:wang        #sudo为wang
+```
+
+#### task列表和action组件
+
+play的主体部分是task list，task list中有一个或多个task,各个task 按次序逐个在hosts中指定的所有主机上执行，即在所有主机上完成第一个task后，再开始第二个task
+ task的目的是使用指定的参数执行模块，而在模块参数中可以使用变量。模块执行是幂等的，这意味着多次执行是安全的，因为其结果均一致
+ 每个task都应该有其name，用于playbook的执行结果输出，建议其内容能清晰地描述任务执行步骤。如果未提供name，则action的结果将用于输出
+
+**task两种格式：**
+ (1) action: module arguments
+ (2) module: arguments      建议使用
+
+注意：shell和command模块后面跟命令，而非key=value
+
+范例：
+
+```yaml
+---
+- hosts: websrvs
+  remote_user: root
+  tasks:
+    - name: install httpd
+      yum: name=httpd 
+    - name: start httpd
+      service: name=httpd state=started enabled=yes
+```
+
+#### 其它组件
+
+某任务的状态在运行后为changed时，可通过“notify”通知给相应的handlers
+ 任务可以通过"tags“打标签，可在ansible-playbook命令上使用-t指定进行调用
+
+### playbook 命令
+
+格式
+
+```bash
+ansible-playbook <filename.yml> ... [options]
+```
+
+Bash
+
+常见选项
+
+```bash
+-C --check          #只检测可能会发生的改变，但不真正执行操作
+--list-hosts        #列出运行任务的主机
+--list-tags         #列出tag
+--list-tasks        #列出task
+--limit 主机列表      #只针对主机列表中的主机执行
+-v -vv  -vvv        #显示过程
+```
+
+Bash
+
+范例
+
+```bash
+ansible-playbook  file.yml  --check #只检测
+ansible-playbook  file.yml  
+ansible-playbook  file.yml  --limit websrvs
+```
+
+### playbook实战案例
+
+#### Centos 6 更换yum源
+
+```yaml
+- hosts: hadoopsrvs
+  remote_user: root
+  tasks:
+     - name: "备份yum源"
+       shell: "mv /etc/yum.repos.d/CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo.backup"
+     - name: "从主控端拷贝配置文件到被控端"
+       copy: src=/root/playbook/CentOS-Base.repo dest=/etc/yum.repos.d/
+       #- name: "下载CentOS 6的yum源"
+       #shell: "wget -O /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-6.repo"
+     - name: "清理缓存"
+       shell: "yum clean all"
+     - name: "生成新缓存"
+       shell: "yum makecache"
+       
+* 注意：将 $releasever 全部换成6，将 $basearch 全部换成 x86_64
+$releasever 是获取你centos的版本号的，例如我的centos的版本号为6.7，获取到的为6，但是已经找不到了，所以直接全局改成7即可
+# CentOS-Base.repo
+#
+# The mirror system uses the connecting IP address of the client and the
+# update status of each mirror to pick mirrors that are updated to and
+# geographically close to the client.  You should use this for CentOS updates
+# unless you are manually picking other mirrors.
+#
+# If the mirrorlist= does not work for you, as a fall back you can try the 
+# remarked out baseurl= line instead.
+#
+#
+ 
+[base]
+name=CentOS-7 - Base - mirrors.aliyun.com
+failovermethod=priority
+baseurl=http://mirrors.aliyun.com/centos/7/os/$basearch/
+        http://mirrors.aliyuncs.com/centos/7/os/$basearch/
+        http://mirrors.cloud.aliyuncs.com/centos/7/os/$basearch/
+gpgcheck=1
+gpgkey=http://mirrors.aliyun.com/centos/RPM-GPG-KEY-CentOS-6
+ 
+#released updates 
+[updates]
+name=CentOS-7 - Updates - mirrors.aliyun.com
+failovermethod=priority
+baseurl=http://mirrors.aliyun.com/centos/7/updates/$basearch/
+        http://mirrors.aliyuncs.com/centos/7/updates/$basearch/
+        http://mirrors.cloud.aliyuncs.com/centos/7/updates/$basearch/
+gpgcheck=1
+gpgkey=http://mirrors.aliyun.com/centos/RPM-GPG-KEY-CentOS-6
+ 
+#additional packages that may be useful
+[extras]
+name=CentOS-7 - Extras - mirrors.aliyun.com
+failovermethod=priority
+baseurl=http://mirrors.aliyun.com/centos/7/extras/$basearch/
+        http://mirrors.aliyuncs.com/centos/7/extras/$basearch/
+        http://mirrors.cloud.aliyuncs.com/centos/7/extras/$basearch/
+gpgcheck=1
+gpgkey=http://mirrors.aliyun.com/centos/RPM-GPG-KEY-CentOS-6
+ 
+#additional packages that extend functionality of existing packages
+[centosplus]
+name=CentOS-7 - Plus - mirrors.aliyun.com
+failovermethod=priority
+baseurl=http://mirrors.aliyun.com/centos/7/centosplus/$basearch/
+        http://mirrors.aliyuncs.com/centos/7/centosplus/$basearch/
+        http://mirrors.cloud.aliyuncs.com/centos/7/centosplus/$basearch/
+gpgcheck=1
+enabled=0
+gpgkey=http://mirrors.aliyun.com/centos/RPM-GPG-KEY-CentOS-6
+ 
+#contrib - packages by Centos Users
+[contrib]
+name=CentOS-7 - Contrib - mirrors.aliyun.com
+failovermethod=priority
+baseurl=http://mirrors.aliyun.com/centos/7/contrib/$basearch/
+        http://mirrors.aliyuncs.com/centos/7/contrib/$basearch/
+        http://mirrors.cloud.aliyuncs.com/centos/7/contrib/$basearch/
+gpgcheck=1
+enabled=0
+gpgkey=http://mirrors.aliyun.com/centos/RPM-GPG-KEY-CentOS-6
+```
+
+#### ShellScripts VS  Playbook 案例(httpd)
+
+```yaml
+#SHELL脚本实现
+#!/bin/bash
+# 安装Apache
+yum install --quiet -y httpd 
+# 复制配置文件
+cp /tmp/httpd.conf /etc/httpd/conf/httpd.conf
+cp/tmp/vhosts.conf /etc/httpd/conf.d/
+# 启动Apache，并设置开机启动
+systemctl enable --now httpd 
+
+#Playbook实现
+---
+- hosts: hadoopsrvs
+  remote_user: root
+  tasks:
+    - name: "安装Apache"
+      yum: name=httpd
+    #- name: "复制配置文件"
+      #copy: src=/tmp/httpd.conf dest=/etc/httpd/conf/
+    #- name: "复制配置文件"
+      #copy: src=/tmp/vhosts.conf dest=/etc/httpd/conf.d/
+    - name: "启动Apache，并设置开机启动"
+      service: name=httpd state=started enabled=yes
+
+# 到指定机器验证httpd服务是否启动
+[root@devops ~]# ansible all -a "service httpd status"
+或者
+[root@hadoopnode3 ~]# service httpd status
+httpd (pid  9623) is running...
+```
+
+#### 利用 playbook 创建 mysql 用户
+
+范例：mysql_user.yml
+
+```yaml
+---
+- hosts: dbsrvs
+  remote_user: root
+
+  tasks:
+    - {name: create group, group: name=mysql system=yes gid=306}
+    - name: create user
+      user: name=mysql shell=/sbin/nologin system=yes group=mysql uid=306 home=/data/mysql create_home=no      
+```
+
+#### 利用 playbook 安装 nginx
+
+范例：install_nginx.yml
+
+```yaml
+---
+# install nginx 
+- hosts: websrvs
+  remote_user: root  
+  tasks:
+    - name: add group nginx
+      user: name=nginx state=present
+    - name: add user nginx
+      user: name=nginx state=present group=nginx
+    - name: Install Nginx
+      yum: name=nginx state=present
+    - name: web page
+      copy: src=files/index.html dest=/usr/share/nginx/html/index.html
+    - name: Start Nginx
+      service: name=nginx state=started enabled=yes
+```
+
+#### 利用 playbook 安装和卸载 httpd
+
+范例：install_httpd.yml 
+
+```bash
+---
+#install httpd 
+- hosts: websrvs
+  remote_user: root
+  gather_facts: no
+
+  tasks:
+    - name: Install httpd
+      yum: name=httpd state=present
+    - name: Install configure file
+      copy: src=files/httpd.conf dest=/etc/httpd/conf/
+    - name: web html
+      copy: src=files/index.html  dest=/var/www/html/
+    - name: start service
+      service: name=httpd state=started enabled=yes
+
+ansible-playbook   install_httpd.yml --limit 10.0.0.8
+```
+
+范例：remove_httpd.yml
+
+```yaml
+#remove_httpd.yml
+---
+- hosts: websrvs
+  remote_user: root
+
+  tasks:
+    - name: remove httpd package
+      yum: name=httpd state=absent
+    - name: remove apache user 
+      user: name=apache state=absent
+    - name: remove config file
+      file: name=/etc/httpd  state=absent
+    - name: remove web html
+      file: name=/var/www/html/index.html state=absent
+```
+
+#### 利用 playbook 安装mysql
+
+**范例：安装mysql-5.6.46-linux-glibc2.12**
+
+```bash
+[root@ansible ~]#ls -l /data/ansible/files/mysql-5.6.46-linux-glibc2.12-x86_64.tar.gz 
+-rw-r--r-- 1 root root 403177622 Dec  4 13:05 /data/ansible/files/mysql-5.6.46-linux-glibc2.12-x86_64.tar.gz
+
+[root@ansible ~]#cat /data/ansible/files/my.cnf 
+[mysqld]
+socket=/tmp/mysql.sock
+user=mysql
+symbolic-links=0
+datadir=/data/mysql
+innodb_file_per_table=1
+log-bin
+pid-file=/data/mysql/mysqld.pid
+
+[client]
+port=3306
+socket=/tmp/mysql.sock
+
+[mysqld_safe]
+log-error=/var/log/mysqld.log
+
+[root@ansible ~]#cat /data/ansible/files/secure_mysql.sh 
+#!/bin/bash
+/usr/local/mysql/bin/mysql_secure_installation <<EOF
+
+y
+hadoop
+hadoop
+y
+y
+y
+y
+EOF
+
+[root@ansible ~]#tree /data/ansible/files/
+/data/ansible/files/
+├── my.cnf
+├── mysql-5.6.46-linux-glibc2.12-x86_64.tar.gz
+└── secure_mysql.sh
+
+0 directories, 3 files
+
+[root@ansible ~]#cat /data/ansible/install_mysql.yml
+---
+# install mysql-5.6.46-linux-glibc2.12-x86_64.tar.gz
+- hosts: dbsrvs
+  remote_user: root
+  gather_facts: no
+
+  tasks:
+    - name: install packages
+      yum: name=libaio,perl-Data-Dumper,perl-Getopt-Long
+    - name: create mysql group
+      group: name=mysql gid=306 
+    - name: create mysql user
+      user: name=mysql uid=306 group=mysql shell=/sbin/nologin system=yes create_home=no home=/data/mysql
+    - name: copy tar to remote host and file mode 
+      unarchive: src=/data/ansible/files/mysql-5.6.46-linux-glibc2.12-x86_64.tar.gz dest=/usr/local/ owner=root group=root 
+    - name: create linkfile  /usr/local/mysql 
+      file: src=/usr/local/mysql-5.6.46-linux-glibc2.12-x86_64 dest=/usr/local/mysql state=link
+    - name: data dir
+      shell: chdir=/usr/local/mysql/  ./scripts/mysql_install_db --datadir=/data/mysql --user=mysql
+      tags: data
+    - name: config my.cnf
+      copy: src=/data/ansible/files/my.cnf  dest=/etc/my.cnf 
+    - name: service script
+      shell: /bin/cp /usr/local/mysql/support-files/mysql.server /etc/init.d/mysqld
+    - name: enable service
+      shell: /etc/init.d/mysqld start;chkconfig --add mysqld;chkconfig mysqld on  
+      tags: service
+    - name: PATH variable
+      copy: content='PATH=/usr/local/mysql/bin:$PATH' dest=/etc/profile.d/mysql.sh
+    - name: secure script
+      script: /data/ansible/files/secure_mysql.sh
+      tags: script
+```
+
+Bash
+
+**范例：install_mariadb.yml**
+
+```bash
+---
+#Installing MariaDB Binary Tarballs
+- hosts: dbsrvs
+  remote_user: root
+  gather_facts: no
+
+  tasks:
+    - name: create group
+      group: name=mysql gid=27 system=yes
+    - name: create user
+      user: name=mysql uid=27 system=yes group=mysql shell=/sbin/nologin home=/data/mysql create_home=no
+    - name: mkdir datadir
+      file: path=/data/mysql owner=mysql group=mysql state=directory
+    - name: unarchive package
+      unarchive: src=/data/ansible/files/mariadb-10.2.27-linux-x86_64.tar.gz dest=/usr/local/ owner=root group=root
+    - name: link
+      file: src=/usr/local/mariadb-10.2.27-linux-x86_64 path=/usr/local/mysql state=link 
+    - name: install database
+      shell: chdir=/usr/local/mysql   ./scripts/mysql_install_db --datadir=/data/mysql --user=mysql
+    - name: config file
+      copy: src=/data/ansible/files/my.cnf  dest=/etc/ backup=yes
+    - name: service script
+      shell: /bin/cp  /usr/local/mysql/support-files/mysql.server  /etc/init.d/mysqld
+    - name: start service
+      service: name=mysqld state=started enabled=yes
+    - name: PATH variable
+      copy: content='PATH=/usr/local/mysql/bin:$PATH' dest=/etc/profile.d/mysql.sh
+```
