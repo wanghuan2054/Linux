@@ -2,6 +2,22 @@
 
 **时间**：2021.02.10 10:08:00
 
+## 账号密码
+
+```bash
+# 虚拟机账号密码（XX.XX.XX.220）
+root/root
+
+# MYSQL 管理员账号密码及监控用户密码
+root/Gg117664..
+zabbix/Gg117664..
+
+# zabbix 管理员
+admin/zabbix
+```
+
+
+
 ## 安装环境
 
 ### zabbix server安装信息
@@ -70,6 +86,12 @@ systemctl stop zabbix-server.service
 
 # 重启zabbix即可
 systemctl restart zabbix-server.service
+
+# 设置zabbix-serve服务为自启动服务 
+systemctl enable zabbix-server.service
+
+# 取消zabbix-serve自启动服务 
+systemctl disable zabbix-server.service
 ```
 
 ### Zabbix agent重启(Unix&Linux)
@@ -78,8 +100,11 @@ systemctl restart zabbix-server.service
 # 强行kill 
 $ kill -9 `ps -ef | grep zabbix_agentd | grep -v grep | awk '{print $2}'`
 
-# 进入zabbix server 目录下， sbin下执行脚本 /opt/zabbix/zabbix_agents/sbin/zabbix_agentd
+# 进入zabbix agent 下， sbin下执行脚本 /opt/zabbix/zabbix_agents/sbin/zabbix_agentd
 $ /opt/zabbix/zabbix_agents/sbin/zabbix_agentd
+
+# 在abbix server 下启动agent， sbin下执行脚本 /opt/zabbix/sbin/zabbix_agentd
+$ /opt/zabbix/sbin/zabbix_agentd
 
 # 查看启动之后pid
 ps -ef | grep zabbix_agentd | grep -v grep | awk '{print $2}'
@@ -96,6 +121,12 @@ systemctl  status mysqld.service
 
 # 停止数据库
 systemctl  stop mysqld.service
+
+# 设置mysqld服务为自启动服务 
+systemctl enable mysqld.service
+
+# 取消mysqld自启动服务 
+systemctl disable mysqld.service
 
 ### 登录数据库
 
@@ -148,7 +179,45 @@ systemctl  stop  httpd.service
 
 # 查看httpd服务
 systemctl  status  httpd.service
+
+# 设置httpd服务为自启动服务 
+systemctl enable httpd.service
+
+# 取消httpd自启动服务 
+systemctl disable httpd.service
 ```
+
+### orabbix启动
+
+```bash
+# orabbix 启动
+systemctl start  orabbix.service
+/opt/orabbix/init.d/orabbix start
+
+# orabbix 重新启动
+systemctl restart  orabbix.service
+[root@0daycrack init.d]# /opt/orabbix/init.d/orabbix restart
+Stopping Orabbix service:
+Starting Orabbix service:
+
+# orabbix 停止服务
+systemctl stop  orabbix.service
+[root@0daycrack init.d]# /opt/orabbix/init.d/orabbix stop
+Stopping Orabbix service:
+
+# 查看orabbix服务状态
+systemctl status  orabbix.service
+[root@0daycrack init.d]# /opt/orabbix/init.d/orabbix status
+Orabbix is running
+
+# 设置orabbix服务为自启动服务 
+systemctl enable orabbix.service
+
+# 取消orabbix自启动服务 
+systemctl disable orabbix.service
+```
+
+
 
 ### 检查监控是否正常
 
@@ -189,6 +258,18 @@ Windows 系统防火墙关闭或者开放10050端口 ， 自行百度
 ### 设置zabbix_agentd服务自启动
 ```bash
 win+R,运行services.msc,默认是自动
+```
+
+## 日志及配置管理
+
+```verilog
+Zabbix server配置文件:/etc/zabbix/zabbix_server.conf
+日志文件: /var/log/zabbix/zabbix_server.log
+mysql数据库配置文件: /etc/my.cnf
+日志文件：/var/log/mysqld.log
+apache php参数: /etc/httpd/conf.d/zabbix.conf
+orabbix配置：/opt/orabbix/conf/config.props
+日志文件：/opt/orabbix/logs/orabbix.log
 ```
 
 
