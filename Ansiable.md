@@ -718,8 +718,12 @@ ansible websrvs -m fetch -a ‘src=/root/test.sh dest=/data/scripts’
 ```bash
 #创建空文件
 ansible all -m  file  -a 'path=/data/test.txt state=touch'
-ansible all -m  file  -a 'path=/data/test.txt state=absent'
+# 修改脚本的所有者和权限
 ansible all -m file -a "path=/root/test.sh owner=wang mode=755“
+
+# 删除文件
+ansible all -m  file  -a 'path=/data/test.txt state=absent'
+
 #创建目录
 ansible all -m file -a "path=/data/mysql state=directory owner=mysql group=mysql"
 #创建软链接
@@ -1454,4 +1458,752 @@ Bash
       service: name=mysqld state=started enabled=yes
     - name: PATH variable
       copy: content='PATH=/usr/local/mysql/bin:$PATH' dest=/etc/profile.d/mysql.sh
+```
+
+## Playbook中使用变量
+
+变量名：仅能由字母、数字和下划线组成，且只能以字母开头
+
+**变量定义：**
+
+```
+variable=value
+```
+
+范例：
+
+```
+http_port=80
+```
+
+**变量调用方式：**
+
+通过{{ variable_name }} 调用变量，且变量名前后建议加空格，有时用“{{ variable_name }}”才生效
+
+**变量来源：**
+
+1.ansible 的 setup facts 远程主机的所有变量都可直接调用
+
+2.通过命令行指定变量，优先级最高
+
+```bash
+   ansible-playbook -e varname=value
+```
+
+Bash
+
+3.在playbook文件中定义
+
+```bash
+   vars:
+     - var1: value1
+     - var2: value2
+```
+
+Bash
+
+4.在独立的变量YAML文件中定义
+
+```
+   - hosts: all
+     vars_files:
+       - vars.yml
+```
+
+5.在 /etc/ansible/hosts 中定义
+
+主机（普通）变量：主机组中主机单独定义，优先级高于公共变量
+ 组（公共）变量：针对主机组中所有主机定义统一变量
+
+6.在role中定义
+
+### 使用 setup 模块中变量
+
+本模块自动在playbook调用，不要用ansible命令调用
+
+案例：使用setup变量
+
+```bash
+---
+#var.yml
+- hosts: all
+  remote_user: root
+  gather_facts: yes
+
+  tasks:
+    - name: create log file
+      file: name=/data/{{ ansible_nodename }}.log state=touch owner=wang mode=600
+
+ansible-playbook  var.yml
+```
+
+### 在playbook 命令行中定义变量
+
+范例：
+
+```
+vim var2.yml
+---
+- hosts: websrvs
+  remote_user: root
+  tasks:
+    - name: install package
+      yum: name={{ pkname }} state=present
+
+ansible-playbook  –e pkname=httpd  var2.yml
+```
+
+### 在playbook文件中定义变量
+
+范例：
+
+```bash
+vim var3.yml
+---
+- hosts: websrvs
+  remote_user: root
+  vars:
+    - username: user1
+    - groupname: group1
+
+  tasks:
+    - name: create group
+      group: name={{ groupname }} state=present
+    - name: create user
+      user: name={{ username }} group={{ groupname }} state=present
+
+ansible-playbook -e "username=user2 groupname=group2”  var3.yml
+```
+
+Bash
+
+### 使用变量文件
+
+可以在一个独立的playbook文件中定义变量，在另一个playbook文件中引用变量文件中的变量，比playbook中定义的变量优化级高
+
+```bash
+vim vars.yml
+---
+# variables file
+package_name: mariadb-server
+service_name: mariadb
+
+vim  var4.yml
+---
+#install package and start service
+- hosts: dbsrvs
+  remote_user: root
+  vars_files:
+    - /root/vars.yml
+
+  tasks:
+    - name: install package
+      yum: name={{ package_name }}
+      tags: install
+    - name: start service
+      service: name={{ service_name }} state=started enabled=yes
+```
+
+范例：
+
+```bash
+cat  vars2.yml
+---
+var1: httpd
+var2: nginx
+
+cat  var5.yml
+---         
+- hosts: web
+  remote_user: root
+  vars_files:
+    - vars2.yml
+
+   tasks:
+     - name: create httpd log
+       file: name=/app/{{ var1 }}.log state=touch
+     - name: create nginx log
+       file: name=/app/{{ var2 }}.log state=touch
+```
+
+### 主机清单文件中定义变量
+
+#### 主机变量
+
+在inventory 主机清单文件中为指定的主机定义变量以便于在playbook中使用
+
+范例：
+
+```
+[websrvs]
+www1.magedu.com http_port=80 maxRequestsPerChild=808
+www2.magedu.com http_port=8080 maxRequestsPerChild=909
+```
+
+#### 组（公共）变量
+
+在inventory 主机清单文件中赋予给指定组内所有主机上的在playbook中可用的变量，如果和主机变是同名，优先级低于主机变量
+
+范例：
+
+```
+[websrvs]
+www1.magedu.com
+www2.magedu.com
+
+[websrvs:vars]
+ntp_server=ntp.magedu.com
+nfs_server=nfs.magedu.com
+```
+
+范例：
+
+```bash
+vim /etc/ansible/hosts
+
+[websrvs]
+192.168.0.101 hname=www1 domain=magedu.io
+192.168.0.102 hname=www2 
+
+[websvrs:vars]
+mark=“-”
+domain=magedu.org
+
+ansible  websvrs  –m hostname –a ‘name={{ hname }}{{ mark }}{{ domain }}’
+bash
+#命令行指定变量： 
+ansible  websvrs  –e domain=magedu.cn –m hostname –a    ‘name={{ hname }}{{ mark }}{{ domain }}’
+```
+
+## template 模板
+
+模板是一个文本文件，可以做为生成文件的模版，并且模板文件中还可嵌套jinja语法
+
+### jinja2语言
+
+网站：`https://jinja.palletsprojects.com/en/2.11.x/`
+
+jinja2 语言使用字面量，有下面形式：
+ 字符串：使用单引号或双引号
+ 数字：整数，浮点数
+ 列表：[item1, item2, …]
+ 元组：(item1, item2, …)
+ 字典：{key1:value1, key2:value2, …}
+ 布尔型：true/false
+ 算术运算：+, -, *, /, //, %, **
+ 比较操作：==, !=, >, >=, <, <=
+ 逻辑运算：and，or，not
+ 流表达式：For，If，When
+
+**字面量：**
+
+表达式最简单的形式就是字面量。字面量表示诸如字符串和数值的 Python 对象。如“Hello World”
+ 双引号或单引号中间的一切都是字符串。无论何时你需要在模板中使用一个字符串（比如函数调用、过滤器或只是包含或继承一个模板的参数），如42，42.23
+ 数值可以为整数和浮点数。如果有小数点，则为浮点数，否则为整数。在 Python 里， 42 和 42.0 是不一样的
+
+**算术运算：**
+
+Jinja 允许用计算值。支持下面的运算符
+ +：把两个对象加到一起。通常对象是素质，但是如果两者是字符串或列表，你可以用这 种方式来衔接它们。无论如何这不是首选的连接字符串的方式！连接字符串见 ~ 运算符。 {{ 1 + 1 }} 等于 2
+ -：用第一个数减去第二个数。 {{ 3 – 2 }} 等于 1
+ /：对两个数做除法。返回值会是一个浮点数。 {{ 1 / 2 }} 等于 {{ 0.5 }}
+ //：对两个数做除法，返回整数商。 {{ 20 // 7 }} 等于 2
+ %：计算整数除法的余数。 {{ 11 % 7 }} 等于 4
+ *：用右边的数乘左边的操作数。 {{ 2*  2 }} 会返回 4 。也可以用于重 复一个字符串多次。 {{ ‘=’  *80 }} 会打印 80 个等号的横条\
+ **：取左操作数的右操作数次幂。 {{ 2**3 }} 会返回 8 
+
+**比较操作符**
+ ==  比较两个对象是否相等
+ !=  比较两个对象是否不等
+
+> 如果左边大于右边，返回 true
+>  = 如果左边大于等于右边，返回 true
+>  <   如果左边小于右边，返回 true
+>  <=  如果左边小于等于右边，返回 true
+
+**逻辑运算符**
+ 对于 if 语句，在 for 过滤或 if 表达式中，它可以用于联合多个表达式
+ and 如果左操作数和右操作数同为真，返回 true
+ or  如果左操作数和右操作数有一个为真，返回 true
+ not 对一个表达式取反
+ (expr)表达式组
+ true / false true 永远是 true ，而 false 始终是 false 
+
+### template
+
+template功能：可以根据和参考模块文件，动态生成相类似的配置文件
+ template文件必须存放于templates目录下，且命名为 .j2 结尾
+ yaml/yml 文件需和templates目录平级，目录结构如下示例：
+ ./
+ ├── temnginx.yml
+ └── templates
+ └── nginx.conf.j2
+
+范例：利用template 同步nginx配置文件
+
+```
+#准备templates/nginx.conf.j2文件
+vim temnginx.yml
+---
+- hosts: websrvs
+  remote_user: root
+
+  tasks:
+    - name: template config to remote hosts
+      template: src=nginx.conf.j2 dest=/etc/nginx/nginx.conf
+
+ ansible-playbook temnginx.yml
+```
+
+**template变更替换**
+
+范例：
+
+```yaml
+#修改文件nginx.conf.j2 
+mkdir templates
+vim templates/nginx.conf.j2
+worker_processes {{ ansible_processor_vcpus }};
+
+vim temnginx2.yml
+---
+- hosts: websrvs
+  remote_user: root
+
+  tasks:
+    - name: install nginx
+      yum: name=nginx
+    - name: template config to remote hosts
+      template: src=nginx.conf.j2 dest=/etc/nginx/nginx.conf 
+    - name: start service
+      service: name=nginx state=started enable=yes
+
+ansible-playbook temnginx2.yml
+```
+
+YAML
+
+**template算术运算**
+
+范例：
+
+```
+vim nginx.conf.j2 
+worker_processes {{ ansible_processor_vcpus**2 }};    
+worker_processes {{ ansible_processor_vcpus+2 }}; 
+```
+
+范例：
+
+```bash
+[root@ansible ansible]#vim templates/nginx.conf.j2
+worker_processes {{ ansible_processor_vcpus**3 }};
+
+[root@ansible ansible]#cat templnginx.yml
+---
+- hosts: websrvs
+  remote_user: root
+
+  tasks:
+    - name: install nginx
+      yum: name=nginx
+    - name: template config to remote hosts
+      template: src=nginx.conf.j2 dest=/etc/nginx/nginx.conf
+      notify: restart nginx
+    - name: start service
+      service: name=nginx state=started enabled=yes
+
+  handlers:
+    - name: restart nginx
+      service: name=nginx state=restarted
+
+ansible-playbook  templnginx.yml --limit 10.0.0.8
+```
+
+### template中使用流程控制 for 和 if
+
+template中也可以使用流程控制 for 循环和 if 条件判断，实现动态生成文件功能
+
+范例
+
+```yaml
+#temlnginx2.yml
+---
+- hosts: websrvs
+  remote_user: root
+  vars:
+    nginx_vhosts:
+      - 81
+      - 82
+      - 83
+  tasks:
+    - name: template config
+      template: src=nginx.conf.j2 dest=/data/nginx.conf
+
+#templates/nginx.conf2.j2
+{% for vhost in  nginx_vhosts %}
+server {
+   listen {{ vhost }}
+}
+{% endfor %}
+
+ansible-playbook -C  templnginx2.yml  --limit 10.0.0.8
+
+#生成的结果：
+server {
+   listen 81   
+}
+server {
+   listen 82   
+}
+server {
+   listen 83   
+}
+```
+
+范例：
+
+```bash
+#temlnginx3.yml
+---
+- hosts: websrvs
+  remote_user: root
+  vars:
+    nginx_vhosts:
+      - listen: 8080
+  tasks:
+    - name: config file
+      template: src=nginx.conf3.j2 dest=/data/nginx3.conf
+
+#templates/nginx.conf3.j2
+{% for vhost in nginx_vhosts %}   
+server {
+  listen {{ vhost.listen }}
+}
+{% endfor %}
+
+ansible-playbook   templnginx3.yml  --limit 10.0.0.8
+
+#生成的结果
+server {
+  listen 8080  
+}
+```
+
+范例：
+
+```yaml
+#templnginx4.yml
+- hosts: websrvs
+  remote_user: root
+  vars:
+    nginx_vhosts:
+      - listen: 8080
+        server_name: "web1.magedu.com"
+        root: "/var/www/nginx/web1/"
+      - listen: 8081
+        server_name: "web2.magedu.com"
+        root: "/var/www/nginx/web2/"
+      - {listen: 8082, server_name: "web3.magedu.com", root: "/var/www/nginx/web3/"}
+  tasks:
+    - name: template config 
+      template: src=nginx.conf4.j2 dest=/data/nginx4.conf
+
+# templates/nginx.conf4.j2
+{% for vhost in nginx_vhosts %}
+server {
+   listen {{ vhost.listen }}
+   server_name {{ vhost.server_name }}
+   root {{ vhost.root }}  
+}
+{% endfor %}
+
+ansible-playbook  templnginx4.yml --limit 10.0.0.8
+
+#生成结果：
+server {
+    listen 8080
+    server_name web1.magedu.com
+    root /var/www/nginx/web1/  
+}
+server {
+    listen 8081
+    server_name web2.magedu.com
+    root /var/www/nginx/web2/  
+}
+server {
+    listen 8082
+    server_name web3.magedu.com
+    root /var/www/nginx/web3/  
+} 
+```
+
+在模版文件中还可以使用 if条件判断，决定是否生成相关的配置信息
+
+范例：
+
+```yaml
+#templnginx5.yml
+- hosts: websrvs
+  remote_user: root
+  vars:
+    nginx_vhosts:
+      - web1:
+        listen: 8080
+        root: "/var/www/nginx/web1/"
+      - web2:
+        listen: 8080
+        server_name: "web2.magedu.com"
+        root: "/var/www/nginx/web2/"
+      - web3:
+        listen: 8080
+        server_name: "web3.magedu.com"
+        root: "/var/www/nginx/web3/"
+  tasks:
+    - name: template config to 
+      template: src=nginx.conf5.j2 dest=/data/nginx5.conf
+
+#templates/nginx.conf5.j2
+{% for vhost in  nginx_vhosts %}
+server {
+   listen {{ vhost.listen }}
+   {% if vhost.server_name is defined %}
+server_name {{ vhost.server_name }}
+   {% endif %}
+root  {{ vhost.root }}
+}
+{% endfor %}
+
+#生成的结果
+server {
+   listen 8080
+   root  /var/www/nginx/web1/
+}
+server {
+   listen 8080
+   server_name web2.magedu.com
+   root  /var/www/nginx/web2/
+}
+server {
+   listen 8080
+   server_name web3.magedu.com
+   root  /var/www/nginx/web3/
+}
+```
+
+## playbook使用 when
+
+when语句，可以实现条件测试。如果需要根据变量、facts或此前任务的执行结果来做为某task执行与否的前提时要用到条件测试,通过在task后添加when子句即可使用条件测试，jinja2的语法格式
+
+范例：
+
+```yaml
+---
+- hosts: websrvs
+  remote_user: root
+  tasks:
+    - name: "shutdown RedHat flavored systems"
+      command: /sbin/shutdown -h now
+      when: ansible_os_family == "RedHat"
+```
+
+范例：
+
+```yaml
+---
+- hosts: websrvs
+  remote_user: root
+  tasks:
+    - name: add group nginx
+      tags: user
+      user: name=nginx state=present
+    - name: add user nginx
+      user: name=nginx state=present group=nginx
+    - name: Install Nginx
+      yum: name=nginx state=present
+    - name: restart Nginx
+      service: name=nginx state=restarted
+      when: ansible_distribution_major_version == “6”
+```
+
+范例：
+
+```yaml
+---
+- hosts: websrvs
+  remote_user: root
+  tasks: 
+    - name: install conf file to centos7
+      template: src=nginx.conf.c7.j2 dest=/etc/nginx/nginx.conf
+      when: ansible_distribution_major_version == "7"
+    - name: install conf file to centos6
+      template: src=nginx.conf.c6.j2 dest=/etc/nginx/nginx.conf
+      when: ansible_distribution_major_version == "6"
+```
+
+## playbook 使用迭代 with_items
+
+迭代：当有需要重复性执行的任务时，可以使用迭代机制
+ 对迭代项的引用，固定变量名为”item“
+ 要在task中使用with_items给定要迭代的元素列表
+
+**列表元素格式：**
+
+- 字符串
+- 字典
+
+范例：
+
+```bash
+---
+- hosts: websrvs
+  remote_user: root
+
+  tasks:
+    - name: add several users
+      user: name={{ item }} state=present groups=wheel
+      with_items:
+        - testuser1
+        - testuser2
+#上面语句的功能等同于下面的语句
+    - name: add user testuser1
+      user: name=testuser1 state=present groups=wheel
+    - name: add user testuser2
+      user: name=testuser2 state=present groups=wheel
+```
+
+范例：
+
+```bash
+---
+#remove mariadb server
+- hosts: appsrvs:!192.168.38.8
+  remote_user: root
+
+  tasks:
+    - name: stop service
+      shell: /etc/init.d/mysqld stop
+    - name:  delete files and dir
+      file: path={{item}} state=absent
+      with_items:
+        - /usr/local/mysql
+        - /usr/local/mariadb-10.2.27-linux-x86_64
+        - /etc/init.d/mysqld
+        - /etc/profile.d/mysql.sh
+        - /etc/my.cnf
+        - /data/mysql
+    - name: delete user
+      user: name=mysql state=absent remove=yes 
+```
+
+范例：
+
+```bash
+---
+- hosts：websrvs
+  remote_user: root
+
+  tasks
+    - name: install some packages
+      yum: name={{ item }} state=present
+      with_items:
+        - nginx
+        - memcached
+        - php-fpm 
+```
+
+范例：
+
+```bash
+---
+- hosts: websrvs
+  remote_user: root
+  tasks:
+    - name: copy file
+      copy: src={{ item }} dest=/tmp/{{ item }}
+      with_items:
+        - file1
+        - file2
+        - file3
+    - name: yum install httpd
+      yum: name={{ item }}  state=present 
+      with_items:
+        - apr
+        - apr-util
+        - httpd
+```
+
+**迭代嵌套子变量：**在迭代中，还可以嵌套子变量，关联多个变量在一起使用
+
+示例：
+
+```yaml
+---
+- hosts: websrvs
+  remote_user: root
+
+  tasks:
+    - name: add some groups
+      group: name={{ item }} state=present
+      with_items:
+        - nginx
+        - mysql
+        - apache
+    - name: add some users
+      user: name={{ item.name }} group={{ item.group }} state=present
+      with_items:
+        - { name: 'nginx', group: 'nginx' }
+        - { name: 'mysql', group: 'mysql' }
+        - { name: 'apache', group: 'apache' }
+```
+
+范例：
+
+```bash
+cat with_item2.yml
+---
+- hosts: websrvs
+  remote_user: root
+
+  tasks:
+    - name: add some groups
+      group: name={{ item }} state=present
+      with_items:
+        - g1
+        - g2
+        - g3
+    - name: add some users
+      user: name={{ item.name }} group={{ item.group }} home={{ item.home }} create_home=yes state=present
+      with_items:
+        - { name: 'user1', group: 'g1', home: '/data/user1' }
+        - { name: 'user2', group: 'g2', home: '/data/user2' }
+        - { name: 'user3', group: 'g3', home: '/data/user3' }
+```
+
+# 管理节点过多导致的超时问题解决方法
+
+默认情况下，Ansible将尝试并行管理playbook中所有的机器。对于滚动更新用例，可以使用serial关键字定义Ansible一次应管理多少主机，还可以将serial关键字指定为百分比，表示每次并行执行的主机数占总数的比例
+
+范例：
+
+```
+#vim test_serial.yml
+---
+- hosts: all
+  serial: 2  #每次只同时处理2个主机
+  gather_facts: False
+
+  tasks:
+    - name: task one
+      comand: hostname
+    - name: task two
+      command: hostname
+```
+
+范例：
+
+```bash
+- name: test serail
+  hosts: all
+  serial: "20%"   #每次只同时处理20%的主机
 ```
