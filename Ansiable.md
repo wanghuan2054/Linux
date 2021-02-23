@@ -2207,3 +2207,133 @@ cat with_item2.yml
   hosts: all
   serial: "20%"   #每次只同时处理20%的主机
 ```
+
+# roles角色
+
+角色是ansible自1.2版本引入的新特性，用于层次性、结构化地组织playbook。roles能够根据层次型结构自动装载变量文件、tasks以及handlers等。要使用roles只需要在playbook中使用include指令即可。简单来讲，roles就是通过分别将变量、文件、任务、模板及处理器放置于单独的目录中，并可以便捷地include它们的一种机制。角色一般用于基于主机构建服务的场景中，但也可以是用于构建守护进程等场景中
+
+运维复杂的场景：建议使用roles，代码复用度高
+
+roles：多个角色的集合， 可以将多个的role，分别放至roles目录下的独立子目录中
+ roles/
+ mysql/
+ httpd/
+ nginx/
+ redis/
+
+## Ansible Roles目录编排
+
+roles目录结构如下所示
+
+![Ansible-roles角色详解插图](http://www.yunweipai.com/wp-content/uploads/2020/06/image-20191105111132014-780x396.png)
+
+每个角色，以特定的层级目录结构进行组织
+
+### **roles目录结构：**
+
+ playbook.yml
+ roles/
+ project/
+ tasks/
+ files/
+ vars/
+ templates/
+ handlers/
+ default/
+ meta/       
+
+### **Roles各目录作用**
+
+ roles/project/ :项目名称,有以下子目录
+
+- files/ ：存放由copy或script模块等调用的文件
+- templates/：template模块查找所需要模板文件的目录
+- tasks/：定义task,role的基本元素，至少应该包含一个名为main.yml的文件；其它的文件需要在此文件中通过include进行包含
+- handlers/：至少应该包含一个名为main.yml的文件；其它的文件需要在此文件中通过include进行包含
+- vars/：定义变量，至少应该包含一个名为main.yml的文件；其它的文件需要在此文件中通过include进行包含
+- meta/：定义当前角色的特殊设定及其依赖关系,至少应该包含一个名为main.yml的文件，其它文件需在此文件中通过include进行包含
+- default/：设定默认变量时使用此目录中的main.yml文件，比vars的优先级低
+
+### 创建 role
+
+创建role的步骤
+ (1) 创建以roles命名的目录
+ (2) 在roles目录中分别创建以各角色名称命名的目录，如webservers等
+ (3) 在每个角色命名的目录中分别创建files、handlers、meta、tasks、templates和vars目录；用不到的目录可以创建为空目录，也可以不创建
+ (4) 在playbook文件中，调用各角色
+
+针对大型项目使用Roles进行编排
+ 范例：roles的目录结构
+
+```bash
+nginx-role.yml 
+roles/
+└── nginx 
+     ├── files
+     │    └── main.yml 
+     ├── tasks
+     │    ├── groupadd.yml 
+     │    ├── install.yml 
+     │    ├── main.yml 
+     │    ├── restart.yml 
+     │    └── useradd.yml 
+     └── vars 
+          └── main.yml 
+```
+
+### playbook调用角色
+
+#### **调用角色方法1：**
+
+```yaml
+---
+- hosts: websrvs
+  remote_user: root
+  roles:
+    - mysql
+    - memcached
+    - nginx   
+```
+
+​     
+
+#### **调用角色方法2：**
+
+键role用于指定角色名称，后续的k/v用于传递变量给角色
+
+```yaml
+---
+- hosts: all
+  remote_user: root
+  roles:
+    - mysql
+    - { role: nginx, username: nginx }
+```
+
+#### **调用角色方法3：**
+
+还可基于条件测试实现角色调用
+
+```yaml
+---
+- hosts: all
+  remote_user: root
+  roles:
+    - { role: nginx, username: nginx, when: ansible_distribution_major_version == ‘7’  }
+```
+
+### roles 中 tags 使用
+
+```yaml
+#nginx-role.yml
+---
+- hosts: websrvs
+  remote_user: root
+  roles:
+    - { role: nginx ,tags: [ 'nginx', 'web' ] ,when: ansible_distribution_major_version == "6“ }
+    - { role: httpd ,tags: [ 'httpd', 'web' ]  }
+    - { role: mysql ,tags: [ 'mysql', 'db' ] }
+    - { role: mariadb ,tags: [ 'mariadb', 'db' ] }
+
+ansible-playbook --tags="nginx,httpd,mysql" nginx-role.yml
+```
