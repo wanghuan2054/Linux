@@ -2337,3 +2337,436 @@ roles/
 
 ansible-playbook --tags="nginx,httpd,mysql" nginx-role.yml
 ```
+
+### 实战案例
+
+#### 如何撤销yum 安装的包 yum history undo	
+
+```bash
+[root@centos7 conf]# yum history
+已加载插件：fastestmirror, product-id, search-disabled-repos, subscription-manager
+
+This system is not registered with an entitlement server. You can use subscription-manager to register.
+
+ID     | 命令行                   | 日期和时间       | 操作           | 变更数 
+-------------------------------------------------------------------------------
+    95 | install -y httpd         | 2021-02-25 06:25 | Install        |    1   
+    94 | -y remove httpd mysql-se | 2021-02-23 07:07 | Erase          |   10 EE
+    93 | -d 2 -y install httpd    | 2021-02-22 20:51 | Install        |    1   
+    92 | -d 2 -y install memcache | 2021-02-22 20:50 | Install        |    1   
+    91 | -d 2 -y install nginx    | 2021-02-21 08:56 | Install        |   12   
+    90 | -d 2 -y remove httpd     | 2021-02-21 08:38 | Erase          |    5   
+    89 | -y install yum-utils     | 2021-02-21 08:38 | Install        |    3   
+    88 | install -y ansible       | 2021-02-13 17:24 | Install        |    1   
+    87 | remove ansible           | 2021-02-13 17:24 | Erase          |    1   
+    86 | -y install python-jinja2 | 2021-02-13 17:24 | Install        |    3   
+    85 | install python-pip pytho | 2021-02-13 17:22 | Install        |    5   
+    84 | install -y ansible       | 2021-02-13 17:19 | Install        |   14   
+    83 | remove ansible           | 2021-02-13 17:04 | Erase          |    1 EE
+    82 | update                   | 2021-02-13 16:49 | I, U           |  217 #<
+    81 | install dnf              | 2021-02-13 08:41 | Install        |   13 > 
+    80 | install epel-release -y  | 2021-02-13 08:41 | Update         |    1   
+    79 | remove ansible           | 2021-02-13 08:34 | Erase          |    1   
+    78 | install -y ansible       | 2021-02-13 08:27 | Install        |    1   
+    77 | -y install python36      | 2021-02-13 08:24 | Install        |    4   
+    76 | remove ansible           | 2021-02-13 07:54 | Erase          |    1   
+history list
+[root@centos7 conf]# yum history undo 95
+已加载插件：fastestmirror, product-id, search-disabled-repos, subscription-manager
+
+This system is not registered with an entitlement server. You can use subscription-manager to register.
+
+Undoing transaction 95, from Thu Feb 25 06:25:05 2021
+    安装 httpd-2.4.6-97.el7.centos.x86_64 @updates
+正在解决依赖关系
+--> 正在检查事务
+---> 软件包 httpd.x86_64.0.2.4.6-97.el7.centos 将被 删除
+--> 解决依赖关系完成
+
+依赖关系解决
+
+=============================================================================================================================
+ Package                  架构                      版本                                   源                           大小
+=============================================================================================================================
+正在删除:
+ httpd                    x86_64                    2.4.6-97.el7.centos                    @updates                    9.4 M
+
+事务概要
+=============================================================================================================================
+移除  1 软件包
+
+安装大小：9.4 M
+是否继续？[y/N]：y
+Downloading packages:
+Running transaction check
+Running transaction test
+Transaction test succeeded
+Running transaction
+  正在删除    : httpd-2.4.6-97.el7.centos.x86_64                                                                         1/1 
+  验证中      : httpd-2.4.6-97.el7.centos.x86_64                                                                         1/1 
+
+删除:
+  httpd.x86_64 0:2.4.6-97.el7.centos                                                                                         
+
+完毕！
+```
+
+
+
+#### 案例1：实现 httpd 角色
+
+```bash
+#创建角色相关的目录
+mkdir -pv /data/ansible/roles/httpd/{tasks,handlers,files}
+
+#创建角色相关的文件
+cd /data/ansible/roles/httpd/
+
+vim tasks/main.yml
+- include: group.yml
+- include: user.yml
+- include: install.yml
+- include: config.yml
+- include: index.yml
+- include: service.yml
+
+vim  tasks/user.yml
+- name: create apache user
+  user: name=apache system=yes shell=/sbin/nologin home=/var/www/ uid=80 group=apache
+
+vim  tasks/group.yml
+- name: create apache group
+  group: name=apache system=yes gid=80
+
+vim tasks/install.yml
+- name: install httpd package
+  yum: name=httpd
+
+vim tasks/config.yml
+- name: config file
+  copy: src=httpd.conf dest=/etc/httpd/conf/ backup=yes
+  notify: restart
+
+vim tasks/index.yml
+- name: index.html
+  copy: src=index.html dest=/var/www/html/
+
+vim tasks/service.yml
+- name: start service
+  service: name=httpd state=started enabled=yes
+
+vim handlers/main.yml
+- name: restart
+  service: name=httpd state=restarted
+
+#在files目录下准备两个文件
+ls files/
+httpd.conf index.html
+
+tree /data/ansible/roles/httpd/
+/data/ansible/roles/httpd/
+├── files
+│   ├── httpd.conf
+│   └── index.html
+├── handlers
+│   └── main.yml
+└── tasks
+    ├── config.yml
+    ├── group.yml
+    ├── index.yml
+    ├── install.yml
+    ├── main.yml
+    ├── service.yml
+    └── user.yml
+
+3 directories, 10 files
+
+#在playbook中调用角色
+vim  /data/ansible/role_httpd.yml
+---
+# httpd role
+- hosts: websrvs
+  remote_user: root
+
+  roles:
+    - httpd
+
+#运行playbook
+ansible-playbook  /data/ansible/role_httpd.yml
+```
+
+#### 案例2：实现 nginx 角色
+
+```bash
+mkdir -pv  /data/ansible/roles/nginx/{tasks,handlers,templates,vars}
+
+#创建task文件
+cd /data/ansible/roles/nginx/
+
+vim tasks/main.yml 
+- include: install.yml
+- include: config.yml
+- include: index.yml
+- include: service.yml
+
+vim  tasks/install.yml 
+- name: install
+  yum: name=nginx 
+
+vim tasks/config.yml 
+- name: config file for centos7
+  template: src=nginx7.conf.j2 dest=/etc/nginx/nginx.conf
+  when: ansible_distribution_major_version=="7"
+  notify: restart
+- name: config file for centos8
+  template: src=nginx8.conf.j2 dest=/etc/nginx/nginx.conf
+  when: ansible_distribution_major_version=="8"
+  notify: restart
+
+vim  tasks/index.yml 
+- name: index.html
+  copy: src=roles/httpd/files/index.html dest=/usr/share/nginx/html/
+
+vim tasks/service.yml 
+- name: start service
+  service: name=nginx state=started enabled=yes
+
+#创建handler文件
+cat handlers/main.yml 
+- name: restart
+  service: name=nginx state=restarted
+
+#创建两个template文件
+cat templates/nginx7.conf.j2
+...省略...
+user {{user}};
+worker_processes {{ansible_processor_vcpus+3}};   #修改此行
+error_log /var/log/nginx/error.log;
+pid /run/nginx.pid;
+...省略...
+
+cat templates/nginx8.conf.j2
+...省略...
+user nginx;
+worker_processes {{ansible_processor_vcpus**3}};  #修改此行
+error_log /var/log/nginx/error.log;
+pid /run/nginx.pid;
+...省略...
+
+#创建变量文件
+vim vars/main.yml 
+user: daemon
+
+#目录结构如下
+
+tree /data/ansible/roles/nginx/
+/data/ansible/roles/nginx/
+├── handlers
+│   └── main.yml
+├── tasks
+│   ├── config.yml
+│   ├── file.yml
+│   ├── install.yml
+│   ├── main.yml
+│   └── service.yml
+├── templates
+│   ├── nginx7.conf.j2
+│   └── nginx8.conf.j2
+└── vars
+    └── main.yml
+
+4 directories, 9 files
+
+#在playbook中调用角色
+vim /data/ansible/role_nginx.yml 
+---
+#nginx role 
+- hosts: websrvs
+
+  roles:
+    - role: nginx
+
+#运行playbook
+ansible-playbook  /data/ansible/role_nginx.yml
+```
+
+#### 案例3：实现 memcached 角色
+
+```bash
+mkdir -pv  /data/ansible/roles/memcached/{tasks,templates}
+
+cd /data/ansible/roles/memcached
+vim tasks/main.yml 
+- include: install.yml
+- include: config.yml
+- include: service.yml
+
+vim tasks/install.yml 
+- name: install
+  yum: name=memcached
+
+vim tasks/config.yml 
+- name: config file
+  template: src=memcached.j2  dest=/etc/sysconfig/memcached
+
+vim tasks/service.yml 
+- name: service
+  service: name=memcached state=started enabled=yes
+
+vim templates/memcached.j2 
+PORT="11211"
+USER="memcached"
+MAXCONN="1024"
+CACHESIZE="{{ansible_memtotal_mb//4}}"
+OPTIONS=""
+
+tree /data/ansible/roles/memcached/
+/data/ansible/roles/memcached/
+├── tasks
+│   ├── config.yml
+│   ├── install.yml
+│   ├── main.yml
+│   └── service.yml
+└── templates
+    └── memcached.j2
+
+2 directories, 5 files
+
+vim /data/ansible/role_memcached.yml 
+---
+- hosts: appsrvs
+
+  roles:
+    - role: memcached
+
+ansible-play /data/ansible/role_memcached.yml 
+```
+
+#### 案例4：实现 mysql 5.6 的角色
+
+```bash
+[root@ansible ~]#cat /data/ansible/roles/mysql/files/my.cnf 
+[mysqld]
+socket=/tmp/mysql.sock
+user=mysql
+symbolic-links=0
+datadir=/data/mysql
+innodb_file_per_table=1
+log-bin
+pid-file=/data/mysql/mysqld.pid
+
+[client]
+port=3306
+socket=/tmp/mysql.sock
+
+[mysqld_safe]
+log-error=/var/log/mysqld.log
+
+[root@ansible ~]#cat /data/ansible/roles/mysql/files/secure_mysql.sh 
+#!/bin/bash
+/usr/local/mysql/bin/mysql_secure_installation <<EOF
+
+y
+magedu
+magedu
+y
+y
+y
+y
+EOF
+
+[root@ansible ~]#chmod +x  /data/ansible/roles/mysql/files/secure_mysql.sh
+
+[root@ansible ~]#ls /data/ansible/roles/mysql/files/
+my.cnf  mysql-5.6.46-linux-glibc2.12-x86_64.tar.gz  secure_mysql.sh
+
+[root@ansible ~]#cat /data/ansible/roles/mysql/tasks/main.yml
+- include: install.yml
+- include: group.yml
+- include: user.yml
+- include: unarchive.yml
+- include: link.yml
+- include: data.yml
+- include: config.yml
+- include: service.yml
+- include: path.yml
+- include: secure.yml
+
+[root@ansible ~]#cat /data/ansible/roles/mysql/tasks/install.yml 
+- name: install packages                                            
+  yum: name=libaio,perl-Data-Dumper,perl-Getopt-Long
+[root@ansible ~]#cat /data/ansible/roles/mysql/tasks/group.yml 
+- name: create mysql group
+  group: name=mysql gid=306
+[root@ansible ~]#cat /data/ansible/roles/mysql/tasks/user.yml 
+- name: create mysql user
+  user: name=mysql uid=306 group=mysql shell=/sbin/nologin system=yes create_home=no home=/data/mysql
+[root@ansible ~]#cat /data/ansible/roles/mysql/tasks/unarchive.yml 
+- name: copy tar to remote host and file mode 
+  unarchive: src=mysql-5.6.46-linux-glibc2.12-x86_64.tar.gz dest=/usr/local/ owner=root group=root
+[root@ansible ~]#cat /data/ansible/roles/mysql/tasks/link.yml 
+- name: mkdir /usr/local/mysql 
+  file: src=/usr/local/mysql-5.6.46-linux-glibc2.12-x86_64 dest=/usr/local/mysql state=link
+[root@ansible ~]#cat /data/ansible/roles/mysql/tasks/data.yml 
+- name: data dir
+  shell: chdir=/usr/local/mysql/  ./scripts/mysql_install_db --datadir=/data/mysql --user=mysql
+[root@ansible ~]#cat /data/ansible/roles/mysql/tasks/config.yml 
+- name: config my.cnf
+  copy: src=my.cnf  dest=/etc/my.cnf 
+[root@ansible ~]#cat /data/ansible/roles/mysql/tasks/service.yml 
+- name: service script
+  shell: /bin/cp /usr/local/mysql/support-files/mysql.server /etc/init.d/mysqld;chkconfig --add mysqld;chkconfig mysqld on;/etc/init.d/mysqld start
+
+[root@ansible ~]#cat /data/ansible/roles/mysql/tasks/path.yml 
+- name: PATH variable
+  copy: content='PATH=/usr/local/mysql/bin:$PATH' dest=/etc/profile.d/mysql.sh  
+
+[root@ansible ~]#cat /data/ansible/roles/mysql/tasks/secure.yml 
+- name: secure script
+  script: secure_mysql.sh
+
+[root@ansible ~]#tree /data/ansible/roles/mysql/
+/data/ansible/roles/mysql/
+├── files
+│   ├── my.cnf
+│   ├── mysql-5.6.46-linux-glibc2.12-x86_64.tar.gz
+│   └── secure_mysql.sh
+└── tasks
+    ├── config.yml
+    ├── data.yml
+    ├── group.yml
+    ├── install.yml
+    ├── link.yml
+    ├── main.yml
+    ├── path.yml
+    ├── secure.yml
+    ├── service.yml
+    ├── unarchive.yml
+    └── user.yml
+
+2 directories, 14 files
+
+[root@ansible ~]#cat /data/ansible/mysql_roles.yml
+- hosts: dbsrvs
+  remote_user: root
+
+  roles:
+    - {role: mysql,tags: ["mysql","db"]}
+    - {role: nginx,tage: ["nginx","web"]}
+
+[root@ansible ~]#ansible-playbook -t mysql /data/ansible/mysql_roles.yml
+```
+
+#### 案例5 ：实现多角色的选择
+
+```bash
+vim /data/ansible/role_httpd_nginx.yml 
+---
+- hosts: websrvs
+
+  roles:
+    - {role: httpd,tags: [httpd,web], when: ansible_distribution_major_version=="7" }
+    - {role: nginx,tags: [nginx,web], when: ansible_distribution_major_version=="8" }
+
+ansible-playbook -t nginx /data/ansible/role_httpd_nginx.yml 
+```
