@@ -187,7 +187,7 @@ always_populate_raw_post_data = -1
 date.timezone = Asia/Shanghai
 ```
 ### 启动httpd
-```bash
+```shell
 systemctl  start  httpd.service
 systemctl  status  httpd.service
 ```
